@@ -718,7 +718,7 @@ class GForceWidget(Gtk.DrawingArea):
         cr.arc(dot_sx, dot_sy, dot_r*0.35, 0, 2*math.pi)
         cr.set_source_rgba(1.0, 1.0, 1.0, 0.25); cr.fill()
 
-        line_gap = fs_val * 0.72
+        line_gap = (fs_axis + fs_val) * 0.65
 
         def label_pair(axis, value_str, tx, ty):
             cr.select_font_face("Sans", 0, 1); cr.set_font_size(fs_axis)
@@ -812,9 +812,10 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._demo_timers   = []
 
         # compass state
-        self._cmp_target    = 0.0
-        self._cmp_display   = 0.0
-        self._calibrating   = False
+        self._cmp_target        = 0.0
+        self._cmp_display       = 0.0
+        self._calibrating       = False
+        self._cal_seen_incomplete = False
 
         # level state
         self._waiting_cal   = False
@@ -1054,9 +1055,10 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         if self._calibrating:
             hint = self._CALIB_HINT[lvl]
             if hint is not None:
+                self._cal_seen_incomplete = True
                 self._calib_bar.set_title(f"{self._CALIB_STARS[lvl]}  {hint}")
                 self._calib_bar.set_revealed(True)
-            else:
+            elif self._cal_seen_incomplete:
                 self._calibrating = False
                 self._calib_bar.set_button_label("OK")
                 self._calib_bar.set_title("✓ Calibration complete")
@@ -1078,6 +1080,7 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._calib_bar.set_button_label("Skip")
         self._calib_bar.set_revealed(True)
         self._calibrating = True
+        self._cal_seen_incomplete = False
         GLib.timeout_add(300, lambda: self._restart_compass() or False)
 
     def _restart_compass(self):
@@ -1113,10 +1116,10 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         return True
 
     def _auto_calibrate_level(self):
-        self._do_calibrate_level()
+        self._do_calibrate_level(show_dialog=False)
         return False
 
-    def _do_calibrate_level(self):
+    def _do_calibrate_level(self, show_dialog=True):
         self._level_2d.calibrate()
         self._level_hk.calibrate()
         self._level_quer.calibrate()
@@ -1124,8 +1127,17 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._settings["cal_roll"]  = cal_roll
         self._settings["cal_pitch"] = cal_pitch
         save_settings(self._settings)
-        self._status_msg   = _("cal_done", self._lang)
-        self._status_until = GLib.get_monotonic_time() + 2_000_000
+        if show_dialog:
+            dialog = Adw.AlertDialog(
+                heading="Calibration Complete",
+                body="The zero point has been set successfully.",
+            )
+            dialog.add_response("ok", "OK")
+            dialog.set_default_response("ok")
+            dialog.present(self)
+        else:
+            self._status_msg   = _("cal_done", self._lang)
+            self._status_until = GLib.get_monotonic_time() + 2_000_000
 
     def _enter_level_cal_mode(self):
         self._waiting_cal = True

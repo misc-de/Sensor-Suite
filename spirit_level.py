@@ -581,8 +581,13 @@ class SpiritLevelWindow(Adw.ApplicationWindow):
         self._settings["cal_roll"]  = cal_roll
         self._settings["cal_pitch"] = cal_pitch
         save_settings(self._settings)
-        self._status_msg   = _("cal_done", self._lang)
-        self._status_until = GLib.get_monotonic_time() + 2_000_000
+        dialog = Adw.AlertDialog(
+            heading="Calibration Complete",
+            body="The zero point has been set successfully.",
+        )
+        dialog.add_response("ok", "OK")
+        dialog.set_default_response("ok")
+        dialog.present(self)
 
     def _open_settings(self, _btn):
         SettingsWindow(

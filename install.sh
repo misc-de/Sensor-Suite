@@ -20,14 +20,14 @@ cp "$SCRIPT_DIR/spirit_level.py" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/acceleration.py" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/sensor_suite.py"
 
-cp "$SCRIPT_DIR/sensors.png" "$ICON_DIR/$APP_ID.png"
+cp "$SCRIPT_DIR/sensors.png" "$INSTALL_DIR/sensors.png"
 
 cat > "$DESKTOP_DIR/$APP_ID.desktop" << EOF
 [Desktop Entry]
 Name=Sensor Suite
 Comment=Compass, Spirit Level and G-Force sensor display
 Exec=python3 $INSTALL_DIR/sensor_suite.py
-Icon=$APP_ID
+Icon=$INSTALL_DIR/sensors.png
 Terminal=false
 Type=Application
 Categories=Utility;
@@ -36,9 +36,6 @@ EOF
 
 if command -v update-desktop-database &>/dev/null; then
     update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
-fi
-if command -v gtk-update-icon-cache &>/dev/null; then
-    gtk-update-icon-cache -f "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 fi
 
 echo "Sensor Suite installed. Launch it from your application menu."

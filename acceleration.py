@@ -168,7 +168,7 @@ class GForceWidget(Gtk.DrawingArea):
         cr.arc(dot_sx, dot_sy, dot_r * 0.35, 0, 2 * math.pi)
         cr.set_source_rgba(1.0, 1.0, 1.0, 0.25); cr.fill()
 
-        line_gap = fs_val * 0.72
+        line_gap = (fs_axis + fs_val) * 0.65
 
         def label_pair(axis, value_str, tx, ty):
             cr.select_font_face("Sans", 0, 1); cr.set_font_size(fs_axis)

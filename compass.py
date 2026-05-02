@@ -396,7 +396,8 @@ class CompassWindow(Adw.ApplicationWindow):
         self._sensor      = None
         self._demo_timer  = None
         self._anim_timer  = None
-        self._calibrating = False
+        self._calibrating         = False
+        self._cal_seen_incomplete = False
 
         self.set_title("Compass")
         self.set_default_size(360, 640)
@@ -488,6 +489,7 @@ class CompassWindow(Adw.ApplicationWindow):
         self._calib_bar.set_button_label("Skip")
         self._calib_bar.set_revealed(True)
         self._calibrating = True
+        self._cal_seen_incomplete = False
         GLib.timeout_add(300, lambda: self._restart_sensor() or False)
 
     def _on_calib_bar_button(self, banner):
@@ -534,9 +536,10 @@ class CompassWindow(Adw.ApplicationWindow):
         if self._calibrating:
             hint = self._CALIB_HINT[lvl]
             if hint is not None:
+                self._cal_seen_incomplete = True
                 self._calib_bar.set_title(f"{self._CALIB_STARS[lvl]}  {hint}")
                 self._calib_bar.set_revealed(True)
-            else:
+            elif self._cal_seen_incomplete:
                 self._calibrating = False
                 self._calib_bar.set_button_label("OK")
                 self._calib_bar.set_title("✓ Calibration complete")

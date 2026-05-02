@@ -1,0 +1,199 @@
+SENSOR ACCESS ON FURIOS FLX1s
+Magnetometer · Accelerometer · Tilt Angle
+==========================================
+
+SENSOR STACK
+------------
+Android HAL (sensors@2.0-ser)
+        ↓
+  sensorfwd  (runs as system service)
+        ↓
+  ┌─────────────────────────────────────────┐
+  │  D-Bus:  com.nokia.SensorService        │
+  │          (system bus, not session bus)  │
+  │  Socket: /run/sensord.sock              │
+  └─────────────────────────────────────────┘
+
+Both interfaces together form the protocol:
+D-Bus for session management, socket for the data stream.
+
+
+COMMON PROTOCOL (all sensors)
+------------------------------
+1.  Connect to the D-Bus system bus.
+2.  Load plugin:
+      /SensorManager  local.SensorManager  loadPlugin("sensor_name")
+3.  Request session (pass PID as int64!):
+      /SensorManager  local.SensorManager  requestSensor("sensor_name", pid)
+      → returns session_id (int32)
+4.  Connect to Unix socket:
+      /run/sensord.sock
+5.  Send session_id: 4 bytes, little-endian int32.
+6.  Receive 1 handshake byte (value 0x0a — discard).
+7.  Set socket to non-blocking.
+8.  Register GLib.io_add_watch for IO_IN | IO_ERR | IO_HUP.
+9.  Set measurement interval:
+      /SensorManager/<sensor>  local.<SensorClass>  setInterval(session_id, ms)
+10. Start sensor:
+      /SensorManager/<sensor>  local.<SensorClass>  start(session_id)
+
+Data packet format (arrives over the socket):
+  [uint32 count] [count × sensor_struct]
+  Header:  struct.Struct('<I')       → number of records
+  Payload: count × <sensor_struct>  → data records
+
+Cleanup on exit:
+  stop(session_id)                      on sensor path
+  releaseSensor(name, session_id, pid)  on /SensorManager
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MAGNETOMETER (Compass)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Sensor name:       compasssensor
+D-Bus path:        /SensorManager/compasssensor
+Interface:         local.CompassSensor
+Recommended interval: 100 ms
+
+Struct format:
+  _CMP = struct.Struct('<Qiiii')
+  Fields:
+    timestamp      uint64   microseconds
+    degrees        int32    heading 0–359° (calibrated)
+    degreesRaw     int32    raw value
+    degreesToNorth int32    direction to magnetic north
+    level          int32    calibration quality 0–3
+                            (0 = poor, 3 = good)
+
+Calibration:
+  level < 3  →  slowly rotate the device in a figure-eight.
+  level == 3 →  reading is reliable.
+
+Usage:
+  heading = degrees % 360   # compass bearing in degrees
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACCELEROMETER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Sensor name:       accelerometersensor
+D-Bus path:        /SensorManager/accelerometersensor
+Interface:         local.AccelerometerSensor
+Recommended interval: 50 ms
+
+Struct format:
+  _ACCEL = struct.Struct('<Qfffi')
+  Fields:
+    timestamp   uint64   microseconds
+    x           float32  acceleration X-axis in mg
+    y           float32  acceleration Y-axis in mg
+    z           float32  acceleration Z-axis in mg
+    reserved    int32    ignore
+
+Unit: mg (milligravity)  →  1000 mg = 1 g = 9.81 m/s²
+
+Axes (device in portrait, lying flat on a table):
+  X:  points right          (≈    0 mg when flat)
+  Y:  points toward top edge (≈    0 mg when flat)
+  Z:  points out of screen  (≈ +1000 mg when flat, gravity)
+
+Convert to g:
+  x_g = x / 1000.0
+  y_g = y / 1000.0
+  z_g = z / 1000.0
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TILT ANGLE (computed from accelerometer)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+No separate sensor required — calculate angles from X/Y/Z:
+
+  import math
+
+  # x, y, z in mg (raw values from sensor)
+  roll  = math.degrees(math.atan2(x, math.sqrt(y*y + z*z)))
+  pitch = math.degrees(math.atan2(y, math.sqrt(x*x + z*z)))
+
+  roll:   left/right tilt  (0° = level)
+  pitch:  forward/back tilt (0° = level)
+
+Total tilt:
+  tilt = math.sqrt(roll**2 + pitch**2)
+
+Typical thresholds for a spirit level:
+  tilt < 1°  → level
+  tilt < 3°  → slightly tilted
+  tilt ≥ 3°  → tilted
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MINIMAL PYTHON EXAMPLE (accelerometer)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+import os, struct, socket
+from gi.repository import Gio, GLib
+
+SERVICE     = "com.nokia.SensorService"
+SOCKET_PATH = "/run/sensord.sock"
+_HDR        = struct.Struct('<I')
+_ACCEL      = struct.Struct('<Qfffi')
+
+bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+pid = os.getpid()
+
+def call(path, iface, method, args=None, rtype=None):
+    return bus.call_sync(SERVICE, path, iface, method, args,
+                         rtype, Gio.DBusCallFlags.NONE, 3000, None)
+
+call("/SensorManager", "local.SensorManager", "loadPlugin",
+     GLib.Variant("(s)", ("accelerometersensor",)))
+
+res = call("/SensorManager", "local.SensorManager", "requestSensor",
+           GLib.Variant("(sx)", ("accelerometersensor", pid)),
+           GLib.VariantType.new("(i)"))
+session_id = res.get_child_value(0).get_int32()
+
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.connect(SOCKET_PATH)
+sock.send(struct.pack('<i', session_id))
+sock.recv(1)                          # discard handshake byte (0x0a)
+sock.setblocking(False)
+
+buf = b""
+def on_data(fd, condition):
+    global buf
+    buf += sock.recv(4096)
+    while len(buf) >= 4:
+        (count,) = _HDR.unpack_from(buf)
+        need = 4 + count * _ACCEL.size
+        if len(buf) < need:
+            break
+        for i in range(count):
+            _, x, y, z, _ = _ACCEL.unpack_from(buf, 4 + i * _ACCEL.size)
+            print(f"x={x:.1f}  y={y:.1f}  z={z:.1f}  mg")
+        buf = buf[need:]
+    return True
+
+GLib.io_add_watch(sock.fileno(), GLib.IO_IN, on_data)
+
+call("/SensorManager/accelerometersensor",
+     "local.AccelerometerSensor", "setInterval",
+     GLib.Variant("(ii)", (session_id, 50)))
+call("/SensorManager/accelerometersensor",
+     "local.AccelerometerSensor", "start",
+     GLib.Variant("(i)", (session_id,)))
+
+GLib.MainLoop().run()
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REQUIREMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Runtime (all pre-installed on FuriOS):
+  python3, python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1
+  sensorfwd (system service, starts automatically)
+
+Install on another FuriOS device:
+  sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
+
+No root, no system changes, no additional packages required.

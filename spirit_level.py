@@ -49,7 +49,7 @@ def load_settings():
         with open(CONFIG_FILE) as f:
             return json.load(f)
     except Exception:
-        return {"theme": "auto", "lang": "de", "auto_cal": True}
+        return {"theme": "auto", "lang": "en", "auto_cal": True}
 
 
 def save_settings(s):
@@ -64,8 +64,6 @@ def apply_theme(theme: str):
         "light": Adw.ColorScheme.FORCE_LIGHT,
     }.get(theme, Adw.ColorScheme.DEFAULT))
 
-
-# ── Sensor backend ────────────────────────────────────────────────────────────
 
 class AccelBackend:
     def __init__(self):
@@ -99,7 +97,7 @@ class AccelBackend:
                        GLib.Variant("(i)", (self._session_id,)))
             self._available = True
         except Exception as e:
-            print(f"AccelBackend nicht verfügbar: {e}")
+            print(f"AccelBackend not available: {e}")
 
     def _call(self, path, iface, method, args=None, reply_type=None):
         return self._bus.call_sync(SERVICE, path, iface, method, args,
@@ -124,7 +122,7 @@ class AccelBackend:
         except BlockingIOError:
             pass
         except Exception as e:
-            print(f"Accel socket Fehler: {e}")
+            print(f"Accel socket error: {e}")
             return False
         return True
 
@@ -148,8 +146,6 @@ class AccelBackend:
                 except Exception: pass
 
 
-# ── Drawing widgets ───────────────────────────────────────────────────────────
-
 def _bubble_color(tilt):
     if tilt < 1.0:  return 0.18, 0.78, 0.32
     if tilt < 3.0:  return 0.95, 0.72, 0.05
@@ -158,15 +154,11 @@ def _bubble_color(tilt):
 
 def _draw_bubble(cr, bx, by, br, r, g, b):
     cr.arc(bx, by, br, 0, 2*math.pi)
-    cr.set_source_rgba(r, g, b, 0.28)
-    cr.fill()
+    cr.set_source_rgba(r, g, b, 0.28); cr.fill()
     cr.arc(bx, by, br, 0, 2*math.pi)
-    cr.set_source_rgba(r, g, b, 0.95)
-    cr.set_line_width(2.5)
-    cr.stroke()
+    cr.set_source_rgba(r, g, b, 0.95); cr.set_line_width(2.5); cr.stroke()
     cr.arc(bx, by, br*0.30, 0, 2*math.pi)
-    cr.set_source_rgba(1, 1, 1, 0.25)
-    cr.fill()
+    cr.set_source_rgba(1, 1, 1, 0.25); cr.fill()
 
 
 def _rounded_rect(cr, x, y, w, h, rad):
@@ -179,7 +171,6 @@ def _rounded_rect(cr, x, y, w, h, rad):
 
 
 class LevelWidget(Gtk.DrawingArea):
-    """2D-Kreiswaage."""
     MAX_ANGLE = 15.0
 
     def __init__(self):
@@ -188,8 +179,7 @@ class LevelWidget(Gtk.DrawingArea):
         self._cal_roll = self._cal_pitch = 0.0
         self._target_roll = self._target_pitch = 0.0
         self.set_draw_func(self._draw)
-        self.set_hexpand(True)
-        self.set_vexpand(True)
+        self.set_hexpand(True); self.set_vexpand(True)
 
     def set_raw_tilt(self, roll, pitch):
         self._target_roll  = roll  - self._cal_roll
@@ -199,27 +189,19 @@ class LevelWidget(Gtk.DrawingArea):
         dr = (self._target_roll  - self._roll)  * 0.20
         dp = (self._target_pitch - self._pitch) * 0.20
         if abs(dr) > 0.01 or abs(dp) > 0.01:
-            self._roll  += dr
-            self._pitch += dp
-            self.queue_draw()
+            self._roll += dr; self._pitch += dp; self.queue_draw()
 
     def calibrate(self):
-        self._cal_roll  += self._roll
-        self._cal_pitch += self._pitch
-        self._roll = self._pitch = 0.0
-        self._target_roll = self._target_pitch = 0.0
+        self._cal_roll  += self._roll; self._cal_pitch += self._pitch
+        self._roll = self._pitch = self._target_roll = self._target_pitch = 0.0
         self.queue_draw()
 
-    def get_cal(self):
-        return (self._cal_roll, self._cal_pitch)
-
+    def get_cal(self):         return (self._cal_roll, self._cal_pitch)
     def set_cal(self, roll, pitch):
-        self._cal_roll  = roll
-        self._cal_pitch = pitch
+        self._cal_roll = roll; self._cal_pitch = pitch
 
     @property
-    def total_tilt(self):
-        return math.sqrt(self._roll**2 + self._pitch**2)
+    def total_tilt(self): return math.sqrt(self._roll**2 + self._pitch**2)
 
     def _draw(self, area, cr, w, h):
         cx, cy  = w / 2, h / 2
@@ -232,56 +214,41 @@ class LevelWidget(Gtk.DrawingArea):
         r, g, b = _bubble_color(self.total_tilt)
 
         cr.arc(cx, cy, radius, 0, 2*math.pi)
-        cr.set_source_rgba(0.1, 0.1, 0.12, 0.96)
-        cr.fill_preserve()
-        cr.set_source_rgba(r, g, b, 0.35)
-        cr.set_line_width(2.5)
-        cr.stroke()
+        cr.set_source_rgba(0.1, 0.1, 0.12, 0.96); cr.fill_preserve()
+        cr.set_source_rgba(r, g, b, 0.35); cr.set_line_width(2.5); cr.stroke()
 
         cr.arc(cx, cy, radius * 0.13, 0, 2*math.pi)
-        cr.set_source_rgba(r, g, b, 0.18)
-        cr.fill_preserve()
-        cr.set_source_rgba(r, g, b, 0.55)
-        cr.set_line_width(1.5)
-        cr.stroke()
+        cr.set_source_rgba(r, g, b, 0.18); cr.fill_preserve()
+        cr.set_source_rgba(r, g, b, 0.55); cr.set_line_width(1.5); cr.stroke()
 
         for dx, dy in [(-1,0),(1,0),(0,-1),(0,1)]:
             s, e = radius * 0.17, radius * 0.92
-            cr.move_to(cx + dx*s, cy + dy*s)
-            cr.line_to(cx + dx*e, cy + dy*e)
-        cr.set_source_rgba(0.45, 0.45, 0.45, 0.4)
-        cr.set_line_width(1.0)
-        cr.stroke()
-
+            cr.move_to(cx+dx*s, cy+dy*s); cr.line_to(cx+dx*e, cy+dy*e)
+        cr.set_source_rgba(0.45, 0.45, 0.45, 0.4); cr.set_line_width(1.0); cr.stroke()
         _draw_bubble(cr, bx, by, br, r, g, b)
 
 
 class LinearLevelWidget(Gtk.DrawingArea):
-    """Horizontale lineare Wasserwaage (Hochkant)."""
     MAX_ANGLE = 10.0
 
     def __init__(self):
         super().__init__()
         self._angle = self._target = self._cal_offset = 0.0
         self.set_draw_func(self._draw)
-        self.set_hexpand(True)
-        self.set_vexpand(False)
+        self.set_hexpand(True); self.set_vexpand(False)
         self.set_size_request(-1, 116)
 
     def set_raw_angle(self, a):  self._target = a - self._cal_offset
 
     def smooth_tick(self):
         d = (self._target - self._angle) * 0.20
-        if abs(d) > 0.01:
-            self._angle += d
-            self.queue_draw()
+        if abs(d) > 0.01: self._angle += d; self.queue_draw()
 
     def calibrate(self):
         self._cal_offset += self._angle
-        self._angle = self._target = 0.0
-        self.queue_draw()
+        self._angle = self._target = 0.0; self.queue_draw()
 
-    def get_cal(self):   return self._cal_offset
+    def get_cal(self):    return self._cal_offset
     def set_cal(self, v): self._cal_offset = v
 
     @property
@@ -297,28 +264,19 @@ class LinearLevelWidget(Gtk.DrawingArea):
         r, g, b = _bubble_color(self.tilt)
 
         _rounded_rect(cr, tx, ty, tw, th, th/2)
-        cr.set_source_rgba(0.1, 0.1, 0.12, 0.96)
-        cr.fill_preserve()
-        cr.set_source_rgba(r, g, b, 0.35)
-        cr.set_line_width(2.0)
-        cr.stroke()
+        cr.set_source_rgba(0.1, 0.1, 0.12, 0.96); cr.fill_preserve()
+        cr.set_source_rgba(r, g, b, 0.35); cr.set_line_width(2.0); cr.stroke()
 
-        cr.move_to(cx, ty + th*0.10)
-        cr.line_to(cx, ty + th*0.90)
-        cr.set_source_rgba(r, g, b, 0.70)
-        cr.set_line_width(2.0)
-        cr.stroke()
+        cr.move_to(cx, ty + th*0.10); cr.line_to(cx, ty + th*0.90)
+        cr.set_source_rgba(r, g, b, 0.70); cr.set_line_width(2.0); cr.stroke()
 
         for deg in (1.0, 2.0, 3.0):
             off = (deg / self.MAX_ANGLE) * max_tr
             f   = 0.22 if deg != 2.0 else 0.16
             for sign in (-1, 1):
                 x = cx + sign * off
-                cr.move_to(x, ty + th*f)
-                cr.line_to(x, ty + th*(1-f))
-            cr.set_source_rgba(0.45, 0.45, 0.45, 0.35)
-            cr.set_line_width(1.0)
-            cr.stroke()
+                cr.move_to(x, ty + th*f); cr.line_to(x, ty + th*(1-f))
+            cr.set_source_rgba(0.45, 0.45, 0.45, 0.35); cr.set_line_width(1.0); cr.stroke()
 
         a  = max(-self.MAX_ANGLE, min(self.MAX_ANGLE, self._angle))
         bx = cx + (a / self.MAX_ANGLE) * max_tr
@@ -326,31 +284,26 @@ class LinearLevelWidget(Gtk.DrawingArea):
 
 
 class VerticalLevelWidget(Gtk.DrawingArea):
-    """Vertikale lineare Wasserwaage (Quer)."""
     MAX_ANGLE = 10.0
 
     def __init__(self):
         super().__init__()
         self._angle = self._target = self._cal_offset = 0.0
         self.set_draw_func(self._draw)
-        self.set_hexpand(False)
-        self.set_vexpand(True)
+        self.set_hexpand(False); self.set_vexpand(True)
         self.set_size_request(68, -1)
 
     def set_raw_angle(self, a):  self._target = a - self._cal_offset
 
     def smooth_tick(self):
         d = (self._target - self._angle) * 0.20
-        if abs(d) > 0.01:
-            self._angle += d
-            self.queue_draw()
+        if abs(d) > 0.01: self._angle += d; self.queue_draw()
 
     def calibrate(self):
         self._cal_offset += self._angle
-        self._angle = self._target = 0.0
-        self.queue_draw()
+        self._angle = self._target = 0.0; self.queue_draw()
 
-    def get_cal(self):   return self._cal_offset
+    def get_cal(self):    return self._cal_offset
     def set_cal(self, v): self._cal_offset = v
 
     @property
@@ -366,35 +319,24 @@ class VerticalLevelWidget(Gtk.DrawingArea):
         r, g, b = _bubble_color(self.tilt)
 
         _rounded_rect(cr, tx, ty, tw, th, tw/2)
-        cr.set_source_rgba(0.1, 0.1, 0.12, 0.96)
-        cr.fill_preserve()
-        cr.set_source_rgba(r, g, b, 0.35)
-        cr.set_line_width(2.0)
-        cr.stroke()
+        cr.set_source_rgba(0.1, 0.1, 0.12, 0.96); cr.fill_preserve()
+        cr.set_source_rgba(r, g, b, 0.35); cr.set_line_width(2.0); cr.stroke()
 
-        cr.move_to(tx + tw*0.10, cy)
-        cr.line_to(tx + tw*0.90, cy)
-        cr.set_source_rgba(r, g, b, 0.70)
-        cr.set_line_width(2.0)
-        cr.stroke()
+        cr.move_to(tx + tw*0.10, cy); cr.line_to(tx + tw*0.90, cy)
+        cr.set_source_rgba(r, g, b, 0.70); cr.set_line_width(2.0); cr.stroke()
 
         for deg in (1.0, 2.0, 3.0):
             off = (deg / self.MAX_ANGLE) * max_tr
             f   = 0.22 if deg != 2.0 else 0.16
             for sign in (-1, 1):
                 y = cy + sign * off
-                cr.move_to(tx + tw*f, y)
-                cr.line_to(tx + tw*(1-f), y)
-            cr.set_source_rgba(0.45, 0.45, 0.45, 0.35)
-            cr.set_line_width(1.0)
-            cr.stroke()
+                cr.move_to(tx + tw*f, y); cr.line_to(tx + tw*(1-f), y)
+            cr.set_source_rgba(0.45, 0.45, 0.45, 0.35); cr.set_line_width(1.0); cr.stroke()
 
         a  = max(-self.MAX_ANGLE, min(self.MAX_ANGLE, self._angle))
         by = cy - (a / self.MAX_ANGLE) * max_tr
         _draw_bubble(cr, cx, by, br, r, g, b)
 
-
-# ── Settings window ───────────────────────────────────────────────────────────
 
 class SettingsWindow(Adw.PreferencesWindow):
 
@@ -434,8 +376,7 @@ class SettingsWindow(Adw.PreferencesWindow):
         cal_btn.add_css_class("suggested-action")
         cal_btn.set_valign(Gtk.Align.CENTER)
         def _on_cal(_b):
-            self.close()
-            on_calibrate()
+            self.close(); on_calibrate()
         cal_btn.connect("clicked", _on_cal)
         cal_row.add_suffix(cal_btn)
         grp2.add(cal_row)
@@ -466,14 +407,12 @@ class SettingsWindow(Adw.PreferencesWindow):
         save_settings(self._settings)
 
 
-# ── Main window ───────────────────────────────────────────────────────────────
-
-class WasserwageWindow(Adw.ApplicationWindow):
+class SpiritLevelWindow(Adw.ApplicationWindow):
 
     def __init__(self, settings, **kwargs):
         super().__init__(**kwargs)
         self._settings     = settings
-        self._lang         = settings.get("lang", "de")
+        self._lang         = settings.get("lang", "en")
         self._backend      = None
         self._anim_timer   = None
         self._status_msg   = ""
@@ -492,7 +431,7 @@ class WasserwageWindow(Adw.ApplicationWindow):
         toolbar_view.add_top_bar(header)
 
         settings_btn = Gtk.Button(icon_name="preferences-system-symbolic",
-                                  tooltip_text="Einstellungen / Settings")
+                                  tooltip_text="Settings")
         settings_btn.connect("clicked", self._open_settings)
         header.pack_end(settings_btn)
 
@@ -503,7 +442,6 @@ class WasserwageWindow(Adw.ApplicationWindow):
         outer.set_margin_end(10)
         toolbar_view.set_content(outer)
 
-        # Kalibrierungs-Hinweis (eingeblendet wenn auf Tap gewartet wird)
         self._cal_hint = Gtk.Label()
         self._cal_hint.add_css_class("heading")
         self._cal_hint.set_justify(Gtk.Justification.CENTER)
@@ -514,11 +452,9 @@ class WasserwageWindow(Adw.ApplicationWindow):
         self._cal_revealer.set_child(self._cal_hint)
         outer.append(self._cal_revealer)
 
-        # Hochkant bar (above 2D circle)
         self._level_hk = LinearLevelWidget()
         outer.append(self._level_hk)
 
-        # Middle row: 2D circle + Quer bar
         mid = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         mid.set_vexpand(True)
         outer.append(mid)
@@ -529,7 +465,6 @@ class WasserwageWindow(Adw.ApplicationWindow):
         self._level_quer = VerticalLevelWidget()
         mid.append(self._level_quer)
 
-        # Angle / status labels
         self._angle_label = Gtk.Label(label="0.0°")
         self._angle_label.add_css_class("title-1")
         self._angle_label.set_margin_top(4)
@@ -554,7 +489,6 @@ class WasserwageWindow(Adw.ApplicationWindow):
         self._quer_label.add_css_class("dim-label")
         axis_box.append(self._quer_label)
 
-        # Gespeicherte Kalibrierung wiederherstellen
         cal_roll  = settings.get("cal_roll",  0.0)
         cal_pitch = settings.get("cal_pitch", 0.0)
         if cal_roll or cal_pitch:
@@ -568,8 +502,6 @@ class WasserwageWindow(Adw.ApplicationWindow):
 
         self._anim_timer = GLib.timeout_add(16, self._anim_tick)
         GLib.idle_add(self._init_sensor)
-
-    # ── Sensor ────────────────────────────────────────────────────────────
 
     def _init_sensor(self):
         self._backend = AccelBackend()
@@ -603,8 +535,6 @@ class WasserwageWindow(Adw.ApplicationWindow):
         self._level_hk.set_raw_angle(roll)
         self._level_quer.set_raw_angle(pitch)
 
-    # ── Animation tick ────────────────────────────────────────────────────
-
     def _anim_tick(self) -> bool:
         self._level.smooth_tick()
         self._level_hk.smooth_tick()
@@ -621,15 +551,10 @@ class WasserwageWindow(Adw.ApplicationWindow):
             self._detail_label.set_text(self._status_msg)
         else:
             self._status_until = None
-            if tilt < 1.0:
-                self._detail_label.set_text(_("level", lang))
-            elif tilt < 3.0:
-                self._detail_label.set_text(_("slight", lang))
-            else:
-                self._detail_label.set_text(_("tilted", lang))
+            if tilt < 1.0:   self._detail_label.set_text(_("level",  lang))
+            elif tilt < 3.0: self._detail_label.set_text(_("slight", lang))
+            else:            self._detail_label.set_text(_("tilted", lang))
         return True
-
-    # ── Calibration ───────────────────────────────────────────────────────
 
     def _enter_cal_mode(self):
         self._waiting_cal = True
@@ -654,8 +579,6 @@ class WasserwageWindow(Adw.ApplicationWindow):
         self._status_msg   = _("cal_done", self._lang)
         self._status_until = GLib.get_monotonic_time() + 2_000_000
 
-    # ── Settings ──────────────────────────────────────────────────────────
-
     def _open_settings(self, _btn):
         SettingsWindow(
             parent=self,
@@ -666,7 +589,7 @@ class WasserwageWindow(Adw.ApplicationWindow):
         ).present()
 
     def _on_settings_change(self):
-        new_lang = self._settings.get("lang", "de")
+        new_lang = self._settings.get("lang", "en")
         if new_lang != self._lang:
             self._lang = new_lang
             self.set_title(_("title", new_lang))
@@ -679,9 +602,7 @@ class WasserwageWindow(Adw.ApplicationWindow):
         return False
 
 
-# ── Application ───────────────────────────────────────────────────────────────
-
-class WasserwageApp(Adw.Application):
+class SpiritLevelApp(Adw.Application):
 
     def __init__(self):
         super().__init__(application_id="de.cais.Wasserwage",
@@ -689,8 +610,8 @@ class WasserwageApp(Adw.Application):
         self.connect("activate", self._on_activate)
 
     def _on_activate(self, app):
-        WasserwageWindow(settings=load_settings(), application=app).present()
+        SpiritLevelWindow(settings=load_settings(), application=app).present()
 
 
 if __name__ == "__main__":
-    sys.exit(WasserwageApp().run(sys.argv))
+    sys.exit(SpiritLevelApp().run(sys.argv))

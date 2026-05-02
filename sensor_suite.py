@@ -55,7 +55,7 @@ def load_settings():
         with open(CONFIG_FILE) as f:
             return json.load(f)
     except Exception:
-        return {"theme": "auto", "lang": "de", "auto_cal": True}
+        return {"theme": "auto", "lang": "en", "auto_cal": True}
 
 def save_settings(s):
     os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -126,10 +126,10 @@ class HadessBackend:
                 HADESS_BUS, HADESS_PATH, HADESS_COMPASS, None)
             has = self._compass_proxy.get_cached_property("HasCompass")
             if not has or not has.get_boolean():
-                raise RuntimeError("Kein Kompass")
+                raise RuntimeError("No compass")
             self._compass_proxy.connect("g-properties-changed", self._on_props_changed)
         except Exception as e:
-            print(f"hadess D-Bus nicht verfügbar: {e}")
+            print(f"hadess D-Bus not available: {e}")
             self._proxy = self._compass_proxy = None
 
     @property
@@ -192,9 +192,9 @@ class SensorfwBackend:
             self._dbus(self._CMP_PATH, self._CMP_IF, "start",
                        GLib.Variant("(i)", (self._session_id,)))
             self._available = True
-            print(f"Kompass: sensorfwd (session {self._session_id})")
+            print(f"Compass: sensorfwd (session {self._session_id})")
         except Exception as e:
-            print(f"sensorfwd Kompass nicht verfügbar: {e}")
+            print(f"sensorfwd compass not available: {e}")
             if self._sock:
                 self._sock.close()
                 self._sock = None
@@ -223,7 +223,7 @@ class SensorfwBackend:
                 self._buf = self._buf[need:]
         except BlockingIOError: pass
         except Exception as e:
-            print(f"sensorfwd socket Fehler: {e}")
+            print(f"sensorfwd socket error: {e}")
             return False
         return True
 
@@ -267,7 +267,7 @@ class SensorPoller:
         if self._backend:
             self._timer = GLib.timeout_add(self.POLL_MS, self._tick)
         else:
-            print("Kein Kompass-Backend → Demo-Modus")
+            print("No compass backend → demo mode")
 
     def _tick(self):
         result = self._backend.read_heading()
@@ -321,7 +321,7 @@ class AccelBackend:
             self._available = True
             print(f"Accel: sensorfwd (session {self._session_id})")
         except Exception as e:
-            print(f"AccelBackend nicht verfügbar: {e}")
+            print(f"AccelBackend not available: {e}")
 
     def _call(self, path, iface, method, args=None, reply_type=None):
         return self._bus.call_sync(SENSOR_SVC, path, iface, method, args,
@@ -345,7 +345,7 @@ class AccelBackend:
                         cb(*last_xyz)
         except BlockingIOError: pass
         except Exception as e:
-            print(f"Accel socket Fehler: {e}")
+            print(f"Accel socket error: {e}")
             return False
         return True
 
@@ -418,7 +418,7 @@ class CompassWidget(Gtk.DrawingArea):
             cr.move_to(x1, y1); cr.line_to(x2, y2); cr.stroke()
 
         cr.set_font_size(radius * 0.13)
-        for label, deg in [("N", 0), ("O", 90), ("S", 180), ("W", 270)]:
+        for label, deg in [("N", 0), ("E", 90), ("S", 180), ("W", 270)]:
             angle = math.radians(deg - self._heading - 90)
             tx = cx + radius * 0.75 * math.cos(angle)
             ty = cy + radius * 0.75 * math.sin(angle)
@@ -450,7 +450,7 @@ class CompassWidget(Gtk.DrawingArea):
 
         if not self._has_sensor:
             cr.set_font_size(radius * 0.07)
-            msg = "Kein Sensor"
+            msg = "No sensor"
             ext = cr.text_extents(msg)
             cr.move_to(cx - ext.width / 2, cy + radius * 0.35)
             cr.set_source_rgba(1.0, 0.75, 0.1, 0.85)
@@ -808,9 +808,9 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
 
     _CALIB_STARS = ["○○○", "●○○", "●●○", "●●●"]
     _CALIB_HINT  = [
-        "∞-Acht zeichnen — Gerät leicht in alle Richtungen neigen",
-        "Gut — ∞-Acht noch 1–2× wiederholen",
-        "Fast fertig — noch eine Runde",
+        "Draw a figure-8 — tilt device in all directions",
+        "Good — repeat the figure-8 one or two more times",
+        "Almost done — one more round",
         None,
     ]
 
@@ -868,11 +868,6 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         bar.set_reveal(True)
         toolbar_view.add_bottom_bar(bar)
 
-        # ── ViewSwitcherTitle in header ──────────────────────────────────────
-        title = Adw.ViewSwitcherTitle()
-        title.set_stack(self._stack)
-        header.set_title_widget(title)
-
         # ── Load calibration ─────────────────────────────────────────────────
         cal_roll  = settings.get("cal_roll",  0.0)
         cal_pitch = settings.get("cal_pitch", 0.0)
@@ -913,7 +908,7 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._heading_label.set_margin_top(12)
         box.append(self._heading_label)
 
-        self._cardinal_label = Gtk.Label(label="Nord")
+        self._cardinal_label = Gtk.Label(label="North")
         self._cardinal_label.add_css_class("title-3")
         self._cardinal_label.add_css_class("dim-label")
         self._cardinal_label.set_margin_top(4)
@@ -925,7 +920,7 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._calib_level_label.set_margin_top(4)
         box.append(self._calib_level_label)
 
-        page = self._stack.add_titled(box, "kompass", "Kompass")
+        page = self._stack.add_titled(box, "compass", "Compass")
         page.set_icon_name("find-location-symbolic")
 
     def _build_level_page(self):
@@ -982,21 +977,21 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._quer_label.add_css_class("dim-label")
         axis_box.append(self._quer_label)
 
-        page = self._stack.add_titled(self._level_box, "wasserwage", "Wasserwage")
+        page = self._stack.add_titled(self._level_box, "spirit_level", "Spirit Level")
         page.set_icon_name("view-grid-symbolic")
 
     def _build_gforce_page(self):
         self._gforce_widget = GForceWidget()
-        page = self._stack.add_titled(self._gforce_widget, "gforce", "G-Kraft")
+        page = self._stack.add_titled(self._gforce_widget, "gforce", "G-Force")
         page.set_icon_name("system-run-symbolic")
 
     # ── Menu ───────────────────────────────────────────────────────────────────
 
     def _build_menu(self):
         menu = Gio.Menu()
-        menu.append("Kompass kalibrieren", "app.calibrate")
-        menu.append("Einstellungen",       "app.settings")
-        menu.append("Über",                "app.about")
+        menu.append("Calibrate compass", "app.calibrate")
+        menu.append("Settings",          "app.settings")
+        menu.append("About",             "app.about")
         return menu
 
     # ── Sensor init ────────────────────────────────────────────────────────────
@@ -1026,7 +1021,7 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         if level < 0:
             return
         lvl = min(level, 3)
-        self._calib_level_label.set_text(f"Kalibrierung {self._CALIB_STARS[lvl]}")
+        self._calib_level_label.set_text(f"Calibration {self._CALIB_STARS[lvl]}")
         if self._calibrating:
             hint = self._CALIB_HINT[lvl]
             if hint is not None:
@@ -1035,7 +1030,7 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
             else:
                 self._calibrating = False
                 self._calib_bar.set_button_label("OK")
-                self._calib_bar.set_title("✓ Kalibrierung abgeschlossen")
+                self._calib_bar.set_title("✓ Calibration complete")
                 self._calib_bar.set_revealed(True)
                 GLib.timeout_add(2500,
                     lambda: self._calib_bar.set_revealed(False) or False)
@@ -1048,10 +1043,10 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         if self._compass:
             self._compass.release()
             self._compass = None
-        self._calib_level_label.set_text(f"Kalibrierung {self._CALIB_STARS[0]}")
+        self._calib_level_label.set_text(f"Calibration {self._CALIB_STARS[0]}")
         self._calib_bar.set_title(
-            "Gerät flach halten — langsam eine ∞-Acht in der Luft zeichnen")
-        self._calib_bar.set_button_label("Überspringen")
+            "Hold device flat — slowly draw a figure-8 in the air")
+        self._calib_bar.set_button_label("Skip")
         self._calib_bar.set_revealed(True)
         self._calibrating = True
         GLib.timeout_add(300, lambda: self._restart_compass() or False)
@@ -1107,7 +1102,7 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._waiting_cal = True
         self._cal_hint.set_text(_("cal_tap", self._lang))
         self._cal_revealer.set_reveal_child(True)
-        self._stack.set_visible_child_name("wasserwage")
+        self._stack.set_visible_child_name("spirit_level")
 
     def _on_level_tap(self, gesture, n_press, x, y):
         if not self._waiting_cal:
@@ -1176,8 +1171,8 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
 
     @staticmethod
     def _to_cardinal(deg):
-        directions = ["Nord","NNO","NO","ONO","Ost","OSO","SO","SSO",
-                      "Süd","SSW","SW","WSW","West","WNW","NW","NNW"]
+        directions = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
+                      "S","SSW","SW","WSW","W","WNW","NW","NNW"]
         return directions[round(deg / 22.5) % 16]
 
     def do_close_request(self):
@@ -1229,7 +1224,7 @@ class SensorSuiteApp(Adw.Application):
         dialog.set_application_icon("find-location-symbolic")
         dialog.set_developer_name("Chris")
         dialog.set_version("1.0")
-        dialog.set_comments("Kompass · Wasserwage · G-Kraft")
+        dialog.set_comments("Compass · Spirit Level · G-Force")
         dialog.set_license_type(Gtk.License.GPL_3_0)
         dialog.present(self.get_active_window())
 

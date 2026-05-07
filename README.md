@@ -10,6 +10,8 @@ A GTK4/Libadwaita sensor display app for Linux mobile devices (Phosh, FuriOS, Dr
 - **Spirit Level** — 2D bubble level + horizontal and vertical linear levels
 - **G-Force** — accelerometer display with X/Y/Z values and total magnitude
 
+⚠️ **AI-assisted project**  
+
 ## Requirements
 
 - Python 3.10+

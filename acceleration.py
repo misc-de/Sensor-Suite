@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys, math, os, struct, socket as _socket
+import sys, math, os, struct, socket as _socket, json
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -7,12 +7,31 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Gtk, Adw, GLib, Gio
 
+from gps import GeoLocationBackend, format_speed
+
 SERVICE     = "com.nokia.SensorService"
 SOCKET_PATH = "/run/sensord.sock"
 _HDR        = struct.Struct('<I')
 _ACCEL      = struct.Struct('<Qfffi')
 
 _SMOOTH = 0.28
+CONFIG_DIR  = os.path.expanduser("~/.config/de.cais.SensorSuite")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "settings.json")
+
+
+def load_settings():
+    try:
+        with open(CONFIG_FILE) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_settings(settings):
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(settings, f, indent=2)
 
 
 class AccelBackend:
@@ -185,9 +204,12 @@ class AccelerationWindow(Adw.ApplicationWindow):
         self.set_title("Acceleration")
         self.set_default_size(360, 640)
 
+        self._settings = load_settings()
         self._x = self._y = self._z = 0.0
         self._tx = self._ty = self._tz = 0.0
+        self._speed_mps = None
         self._backend    = None
+        self._geo        = None
         self._anim_timer = None
 
         toolbar_view = Adw.ToolbarView()
@@ -196,8 +218,31 @@ class AccelerationWindow(Adw.ApplicationWindow):
         header.set_centering_policy(Adw.CenteringPolicy.STRICT)
         toolbar_view.add_top_bar(header)
 
+        menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic")
+        menu = Gio.Menu()
+        menu.append("Settings", "app.settings")
+        menu_btn.set_menu_model(menu)
+        header.pack_end(menu_btn)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_margin_top(12)
+        box.set_margin_bottom(8)
+        box.set_margin_start(16)
+        box.set_margin_end(16)
+        toolbar_view.set_content(box)
+
+        self._speed_value_label = Gtk.Label(label="--")
+        self._speed_value_label.add_css_class("title-1")
+        box.append(self._speed_value_label)
+
+        self._speed_unit_label = Gtk.Label()
+        self._speed_unit_label.add_css_class("title-4")
+        self._speed_unit_label.add_css_class("dim-label")
+        box.append(self._speed_unit_label)
+
         self._widget = GForceWidget()
-        toolbar_view.set_content(self._widget)
+        box.append(self._widget)
+        self._update_speed_label()
 
         self._anim_timer = GLib.timeout_add(16, self._anim_tick)
         GLib.idle_add(self._init_sensor)
@@ -210,6 +255,9 @@ class AccelerationWindow(Adw.ApplicationWindow):
             self._tz = 1.0
         else:
             GLib.timeout_add(33, self._demo_tick)
+        self._geo = GeoLocationBackend("de.cais.Beschleunigung")
+        if self._geo.available:
+            self._geo.add_callback(self._on_location)
         return False
 
     def _demo_tick(self):
@@ -222,19 +270,64 @@ class AccelerationWindow(Adw.ApplicationWindow):
     def _on_accel(self, x: float, y: float, z: float):
         self._tx, self._ty, self._tz = x, y, z
 
+    def _on_location(self, _altitude_m, speed_mps):
+        self._speed_mps = speed_mps
+        self._update_speed_label()
+
     def _anim_tick(self) -> bool:
         self._x += (self._tx - self._x) * _SMOOTH
         self._y += (self._ty - self._y) * _SMOOTH
         self._z += (self._tz - self._z) * _SMOOTH
         self._widget.update(self._x, self._y, self._z)
+        self._update_speed_label()
         return True
+
+    def _unit_system(self):
+        return self._settings.get("unit_system", "metric")
+
+    def _update_speed_label(self):
+        value, unit = format_speed(self._speed_mps, self._unit_system())
+        self._speed_value_label.set_text(value)
+        self._speed_unit_label.set_text(unit)
+
+    def open_settings(self):
+        SettingsWindow(self, self._settings, self._on_settings_change).present()
+
+    def _on_settings_change(self):
+        self._update_speed_label()
 
     def do_close_request(self):
         if self._anim_timer:
             GLib.source_remove(self._anim_timer)
         if self._backend:
             self._backend.close()
+        if self._geo:
+            self._geo.close()
         return False
+
+
+class SettingsWindow(Adw.PreferencesWindow):
+    def __init__(self, parent, settings, on_change):
+        super().__init__(transient_for=parent, modal=True)
+        self.set_title("Settings")
+        self._settings = settings
+        self._on_change = on_change
+
+        page = Adw.PreferencesPage()
+        self.add(page)
+        group = Adw.PreferencesGroup(title="Units")
+        page.add(group)
+
+        units_row = Adw.ComboRow(title="Speed")
+        units_row.set_model(Gtk.StringList.new(["Metric", "Miles"]))
+        units_row.set_selected(0 if settings.get("unit_system", "metric") == "metric" else 1)
+        units_row.connect("notify::selected", self._on_units)
+        group.add(units_row)
+
+    def _on_units(self, row, _):
+        self._settings["unit_system"] = ["metric", "imperial"][row.get_selected()]
+        save_settings(self._settings)
+        self._on_change()
 
 
 class AccelerationApp(Adw.Application):
@@ -243,6 +336,14 @@ class AccelerationApp(Adw.Application):
                          flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
         self.connect("activate",
                      lambda app: AccelerationWindow(application=app).present())
+        settings_action = Gio.SimpleAction.new("settings", None)
+        settings_action.connect("activate", self._on_settings)
+        self.add_action(settings_action)
+
+    def _on_settings(self, _action, _param):
+        win = self.get_active_window()
+        if win:
+            win.open_settings()
 
 
 if __name__ == "__main__":

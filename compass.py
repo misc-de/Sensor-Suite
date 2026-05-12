@@ -11,6 +11,8 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Gtk, Adw, GLib, Gio
 
+from gps import GeoLocationBackend, format_altitude
+
 IIO_BASE = "/sys/bus/iio/devices"
 MAGN_KEYWORDS = ("magn", "compass", "ak09", "ak8", "mmc56", "mmc34",
                  "lis3mdl", "lsm303", "bmm", "qmc", "icp", "hmc")
@@ -394,8 +396,10 @@ class CompassWindow(Adw.ApplicationWindow):
         self._target      = 0.0
         self._display     = 0.0
         self._sensor      = None
+        self._geo         = None
         self._demo_timer  = None
         self._anim_timer  = None
+        self._altitude_m  = None
         self._calibrating         = False
         self._cal_seen_incomplete = False
 
@@ -439,6 +443,13 @@ class CompassWindow(Adw.ApplicationWindow):
         self._cardinal_label.add_css_class("dim-label")
         self._cardinal_label.set_margin_top(4)
         content_box.append(self._cardinal_label)
+
+        self._altitude_label = Gtk.Label()
+        self._altitude_label.add_css_class("title-4")
+        self._altitude_label.add_css_class("dim-label")
+        self._altitude_label.set_margin_top(8)
+        self._altitude_label.set_visible(False)
+        content_box.append(self._altitude_label)
 
         self._calib_bar = Adw.Banner()
         self._calib_bar.connect("button-clicked", self._on_calib_bar_button)
@@ -512,6 +523,9 @@ class CompassWindow(Adw.ApplicationWindow):
             self._compass.set_heading(0.0, has_sensor=False)
         else:
             self._sensor_label.set_text(self._sensor.label)
+        self._geo = GeoLocationBackend("de.cais.Kompass")
+        if self._geo.available:
+            self._geo.add_callback(self._on_location)
         return False
 
     def _anim_tick(self) -> bool:
@@ -546,6 +560,12 @@ class CompassWindow(Adw.ApplicationWindow):
                 self._calib_bar.set_revealed(True)
                 GLib.timeout_add(2500, lambda: self._calib_bar.set_revealed(False) or False)
 
+    def _on_location(self, altitude_m, _speed_mps):
+        self._altitude_m = altitude_m
+        text = format_altitude(self._altitude_m)
+        self._altitude_label.set_text(text)
+        self._altitude_label.set_visible(bool(text))
+
     @staticmethod
     def _to_cardinal(deg: float) -> str:
         directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
@@ -561,6 +581,8 @@ class CompassWindow(Adw.ApplicationWindow):
             self._demo_timer = None
         if self._sensor:
             self._sensor.release()
+        if self._geo:
+            self._geo.close()
         return False
 
 

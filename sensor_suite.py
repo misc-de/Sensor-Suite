@@ -7,6 +7,8 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Gtk, Adw, GLib, Gio
 
+from gps import GeoLocationBackend, format_altitude, format_speed
+
 # ── Constants ──────────────────────────────────────────────────────────────────
 IIO_BASE       = "/sys/bus/iio/devices"
 MAGN_KEYWORDS  = ("magn", "compass", "ak09", "ak8", "mmc56", "mmc34",
@@ -36,6 +38,9 @@ _T = {
     "s_t_lt":   {"de": "Hell",               "en": "Light"},
     "s_t_dk":   {"de": "Dunkel",             "en": "Dark"},
     "s_lang":   {"de": "Sprache",            "en": "Language"},
+    "s_units":  {"de": "Einheiten",          "en": "Units"},
+    "s_unit_metric":   {"de": "Metrisch",    "en": "Metric"},
+    "s_unit_imperial": {"de": "Meilen",      "en": "Miles"},
     "s_cal":    {"de": "Kalibrierung",       "en": "Calibration"},
     "s_c_ttl":  {"de": "Nullpunkt setzen",   "en": "Set zero point"},
     "s_c_sub":  {"de": "Aktuelle Lage als Referenz übernehmen",
@@ -736,6 +741,7 @@ class SettingsWindow(Adw.PreferencesWindow):
         super().__init__(transient_for=parent, modal=True)
         self.set_title(_("s_ttl", lang))
         self._settings = settings
+        self._on_change = on_change
 
         page = Adw.PreferencesPage()
         self.add(page)
@@ -759,6 +765,13 @@ class SettingsWindow(Adw.PreferencesWindow):
                                          on_change()])
         grp.add(lang_row)
 
+        units_row = Adw.ComboRow(title=_("s_units", lang))
+        units_row.set_model(Gtk.StringList.new([
+            _("s_unit_metric", lang), _("s_unit_imperial", lang)]))
+        units_row.set_selected(0 if settings.get("unit_system", "metric") == "metric" else 1)
+        units_row.connect("notify::selected", self._on_units)
+        grp.add(units_row)
+
     def _on_theme(self, row, _):
         theme = ["auto", "light", "dark"][row.get_selected()]
         self._settings["theme"] = theme
@@ -768,6 +781,11 @@ class SettingsWindow(Adw.PreferencesWindow):
     def _set_lang(self, lang):
         self._settings["lang"] = lang
         save_settings(self._settings)
+
+    def _on_units(self, row, _):
+        self._settings["unit_system"] = ["metric", "imperial"][row.get_selected()]
+        save_settings(self._settings)
+        self._on_change()
 
 
 # ── Combined window ────────────────────────────────────────────────────────────
@@ -788,6 +806,7 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._lang          = settings.get("lang", "de")
         self._accel         = None
         self._compass       = None
+        self._geo           = None
         self._anim_timer    = None
         self._demo_timers   = []
 
@@ -805,6 +824,8 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         # gforce smooth values
         self._gx = self._gy = self._gz = 0.0
         self._gtx = self._gty = self._gtz = 0.0
+        self._altitude_m = None
+        self._speed_mps = None
 
         apply_theme(settings.get("theme", "auto"))
         self.set_title("Sensor Suite")
@@ -890,6 +911,13 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._cardinal_label.set_margin_top(4)
         box.append(self._cardinal_label)
 
+        self._altitude_label = Gtk.Label()
+        self._altitude_label.add_css_class("title-4")
+        self._altitude_label.add_css_class("dim-label")
+        self._altitude_label.set_margin_top(8)
+        self._altitude_label.set_visible(False)
+        box.append(self._altitude_label)
+
         self._calib_level_label = Gtk.Label()
         self._calib_level_label.add_css_class("caption")
         self._calib_level_label.add_css_class("dim-label")
@@ -957,8 +985,26 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         page.set_icon_name("view-grid-symbolic")
 
     def _build_gforce_page(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_margin_top(12)
+        box.set_margin_bottom(8)
+        box.set_margin_start(16)
+        box.set_margin_end(16)
+
+        self._speed_value_label = Gtk.Label(label="--")
+        self._speed_value_label.add_css_class("title-1")
+        self._speed_value_label.set_margin_top(4)
+        box.append(self._speed_value_label)
+
+        self._speed_unit_label = Gtk.Label(label="km/h")
+        self._speed_unit_label.add_css_class("title-4")
+        self._speed_unit_label.add_css_class("dim-label")
+        box.append(self._speed_unit_label)
+
         self._gforce_widget = GForceWidget()
-        page = self._stack.add_titled(self._gforce_widget, "gforce", "G-Force")
+        box.append(self._gforce_widget)
+
+        page = self._stack.add_titled(box, "gforce", "G-Force")
         page.set_icon_name("system-run-symbolic")
 
     # ── Menu ───────────────────────────────────────────────────────────────────
@@ -1019,6 +1065,10 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
             tid = GLib.timeout_add(50, self._demo_compass_tick)
             self._demo_timers.append(tid)
             self._compass_widget.set_heading(0.0, has_sensor=False)
+
+        self._geo = GeoLocationBackend("de.cais.SensorSuite")
+        if self._geo.available:
+            self._geo.add_callback(self._on_location)
 
         return False
 
@@ -1093,6 +1143,11 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._gtz = 1.0 + math.sin(t * 2.9) * 0.15
         return True
 
+    def _on_location(self, altitude_m, speed_mps):
+        self._altitude_m = altitude_m
+        self._speed_mps = speed_mps
+        self._update_location_labels()
+
     def _do_calibrate_level(self, show_dialog=True):
         self._level_2d.calibrate()
         self._level_hk.calibrate()
@@ -1163,6 +1218,7 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._gy += (self._gty - self._gy) * SMOOTH
         self._gz += (self._gtz - self._gz) * SMOOTH
         self._gforce_widget.update(self._gx, self._gy, self._gz)
+        self._update_location_labels()
 
         return True
 
@@ -1180,6 +1236,20 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         new_lang = self._settings.get("lang", "de")
         if new_lang != self._lang:
             self._lang = new_lang
+        self._update_location_labels()
+
+    def _unit_system(self):
+        return self._settings.get("unit_system", "metric")
+
+    def _update_location_labels(self):
+        if hasattr(self, "_altitude_label"):
+            text = format_altitude(self._altitude_m, self._unit_system())
+            self._altitude_label.set_text(text)
+            self._altitude_label.set_visible(bool(text))
+        if hasattr(self, "_speed_value_label"):
+            value, unit = format_speed(self._speed_mps, self._unit_system())
+            self._speed_value_label.set_text(value)
+            self._speed_unit_label.set_text(unit)
 
     # ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1198,6 +1268,8 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
             self._accel.close()
         if self._compass:
             self._compass.release()
+        if self._geo:
+            self._geo.close()
         return False
 
 

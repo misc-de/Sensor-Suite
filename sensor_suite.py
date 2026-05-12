@@ -805,6 +805,7 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         super().__init__(**kwargs)
         self._settings      = settings
         self._lang          = settings.get("lang", "de")
+        self._page_order    = ["compass", "spirit_level", "gforce"]
         self._accel         = None
         self._compass       = None
         self._geo           = None
@@ -857,6 +858,11 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._build_level_page()
         self._build_gforce_page()
 
+        swipe = Gtk.GestureSwipe()
+        swipe.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        swipe.connect("swipe", self._on_stack_swipe)
+        self._stack.add_controller(swipe)
+
         # ── Bottom switcher bar ──────────────────────────────────────────────
         bar = Adw.ViewSwitcherBar()
         bar.set_stack(self._stack)
@@ -897,6 +903,17 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._calib_bar.set_revealed(False)
         box.append(self._calib_bar)
 
+        self._altitude_label = Gtk.Label()
+        self._altitude_label.add_css_class("title-4")
+        self._altitude_label.set_margin_top(4)
+        box.append(self._altitude_label)
+
+        self._altitude_status_label = Gtk.Label()
+        self._altitude_status_label.add_css_class("caption")
+        self._altitude_status_label.add_css_class("dim-label")
+        self._altitude_status_label.set_margin_top(2)
+        box.append(self._altitude_status_label)
+
         self._compass_widget = CompassWidget()
         self._compass_widget.set_size_request(260, 260)
         box.append(self._compass_widget)
@@ -911,17 +928,6 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
         self._cardinal_label.add_css_class("dim-label")
         self._cardinal_label.set_margin_top(4)
         box.append(self._cardinal_label)
-
-        self._altitude_label = Gtk.Label()
-        self._altitude_label.add_css_class("title-4")
-        self._altitude_label.set_margin_top(8)
-        box.append(self._altitude_label)
-
-        self._altitude_status_label = Gtk.Label()
-        self._altitude_status_label.add_css_class("caption")
-        self._altitude_status_label.add_css_class("dim-label")
-        self._altitude_status_label.set_margin_top(2)
-        box.append(self._altitude_status_label)
 
         self._calib_level_label = Gtk.Label()
         self._calib_level_label.add_css_class("caption")
@@ -1055,6 +1061,17 @@ class SensorSuiteWindow(Adw.ApplicationWindow):
             dialog.set_close_response("cancel")
             dialog.connect("response", lambda d, r: self._enter_level_cal_mode() if r == "start" else None)
             dialog.present(self)
+
+    def _on_stack_swipe(self, _gesture, velocity_x, velocity_y):
+        if abs(velocity_x) < 250 or abs(velocity_x) < abs(velocity_y):
+            return
+        current = self._stack.get_visible_child_name()
+        if current not in self._page_order:
+            return
+        direction = 1 if velocity_x < 0 else -1
+        idx = self._page_order.index(current) + direction
+        if 0 <= idx < len(self._page_order):
+            self._stack.set_visible_child_name(self._page_order[idx])
 
     def _on_calib_bar_button(self, banner):
         banner.set_revealed(False)

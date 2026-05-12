@@ -430,6 +430,17 @@ class CompassWindow(Adw.ApplicationWindow):
         content_box.set_margin_end(16)
         toolbar_view.set_content(content_box)
 
+        self._altitude_label = Gtk.Label()
+        self._altitude_label.add_css_class("title-4")
+        self._altitude_label.set_margin_top(4)
+        content_box.append(self._altitude_label)
+
+        self._altitude_status_label = Gtk.Label(label=NO_GPS_SIGNAL)
+        self._altitude_status_label.add_css_class("caption")
+        self._altitude_status_label.add_css_class("dim-label")
+        self._altitude_status_label.set_margin_top(2)
+        content_box.append(self._altitude_status_label)
+
         self._compass = CompassWidget()
         self._compass.set_size_request(280, 280)
         content_box.append(self._compass)
@@ -444,17 +455,6 @@ class CompassWindow(Adw.ApplicationWindow):
         self._cardinal_label.add_css_class("dim-label")
         self._cardinal_label.set_margin_top(4)
         content_box.append(self._cardinal_label)
-
-        self._altitude_label = Gtk.Label()
-        self._altitude_label.add_css_class("title-4")
-        self._altitude_label.set_margin_top(8)
-        content_box.append(self._altitude_label)
-
-        self._altitude_status_label = Gtk.Label(label=NO_GPS_SIGNAL)
-        self._altitude_status_label.add_css_class("caption")
-        self._altitude_status_label.add_css_class("dim-label")
-        self._altitude_status_label.set_margin_top(2)
-        content_box.append(self._altitude_status_label)
 
         self._calib_bar = Adw.Banner()
         self._calib_bar.connect("button-clicked", self._on_calib_bar_button)

@@ -15,17 +15,15 @@ GEOCLUE_LOCATION_IFACE = "org.freedesktop.GeoClue2.Location"
 DBUS_PROPERTIES_IFACE = "org.freedesktop.DBus.Properties"
 GPS_OK_COLOR = "#2ec27e"
 GPS_WAITING_COLOR = "#f5c211"
-NO_GPS_SIGNAL = "Kein GPS Signal"
 
 
-def format_altitude(meters, unit_system="metric"):
+def format_altitude(meters, unit_system="metric", lang="de"):
+    label = "Altitude" if lang == "en" else "Höhe"
+    unit = "ft" if unit_system == "imperial" else "m"
     if meters is None or not math.isfinite(meters):
-        unit = "ft" if unit_system == "imperial" else "m"
-        label = "Altitude" if unit_system == "imperial" else "Höhe"
         return f"{label} -- {unit}"
-    if unit_system == "imperial":
-        return f"Altitude {meters * 3.28084:.0f} ft"
-    return f"Höhe {meters:.0f} m"
+    value = meters * 3.28084 if unit_system == "imperial" else meters
+    return f"{label} {value:.0f} {unit}"
 
 
 def format_speed(meters_per_second, unit_system="metric"):

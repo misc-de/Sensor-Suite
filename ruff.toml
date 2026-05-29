@@ -1,0 +1,8 @@
+# Ruff configuration for Sensor Suite.
+#
+# E402 — gi.require_version() must be called before `from gi.repository import …`,
+#        so module-level imports legitimately follow code.
+# E701/E702 — the codebase deliberately uses compact single-line statements in the
+#        Cairo drawing widgets and tiny accessors; reformatting them hurts readability.
+[lint]
+ignore = ["E402", "E701", "E702"]

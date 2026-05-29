@@ -20,10 +20,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 try:
     import sensor_suite as ss
     import spirit_level as sl
+    import app_config
+    import sensors
+    import widgets
+    import i18n
+    import gps
     HAS_GTK = True
 except Exception:
     HAS_GTK = False
-    ss = sl = None
+    ss = sl = app_config = sensors = widgets = i18n = gps = None  # type: ignore[assignment]
 
 needs_gtk = pytest.mark.skipif(not HAS_GTK, reason="GTK4/libadwaita not installed")
 
@@ -52,12 +57,12 @@ class TestTranslation:
         assert ss._("__no_such_key__", "en") == "__no_such_key__"
 
     def test_all_ss_keys_have_en_and_de(self):
-        for key, langs in ss._T.items():
+        for key, langs in i18n._T.items():
             assert "en" in langs, f"sensor_suite.py: key '{key}' missing 'en'"
             assert "de" in langs, f"sensor_suite.py: key '{key}' missing 'de'"
 
     def test_all_sl_keys_have_en_and_de(self):
-        for key, langs in sl._T.items():
+        for key, langs in i18n._T.items():
             assert "en" in langs, f"spirit_level.py: key '{key}' missing 'en'"
             assert "de" in langs, f"spirit_level.py: key '{key}' missing 'de'"
 
@@ -69,31 +74,31 @@ class TestTranslation:
 @needs_gtk
 class TestBubbleColor:
     def test_level_green(self):
-        assert ss._bubble_color(0.0)   == (0.18, 0.78, 0.32)
-        assert ss._bubble_color(0.999) == (0.18, 0.78, 0.32)
+        assert widgets._bubble_color(0.0)   == (0.18, 0.78, 0.32)
+        assert widgets._bubble_color(0.999) == (0.18, 0.78, 0.32)
 
     def test_slightly_tilted_yellow(self):
-        r, g, b = ss._bubble_color(1.0)
+        r, g, b = widgets._bubble_color(1.0)
         assert r == pytest.approx(0.95)
 
     def test_tilted_red(self):
-        r, g, b = ss._bubble_color(3.0)
+        r, g, b = widgets._bubble_color(3.0)
         assert r == pytest.approx(0.88)
 
     def test_boundary_at_1_is_yellow(self):
-        assert ss._bubble_color(1.0)[0] == pytest.approx(0.95)
+        assert widgets._bubble_color(1.0)[0] == pytest.approx(0.95)
 
     def test_boundary_at_3_is_red(self):
-        assert ss._bubble_color(3.0)[0] == pytest.approx(0.88)
+        assert widgets._bubble_color(3.0)[0] == pytest.approx(0.88)
 
     def test_returns_three_floats(self):
-        result = ss._bubble_color(2.0)
+        result = widgets._bubble_color(2.0)
         assert len(result) == 3
         assert all(isinstance(v, float) for v in result)
 
     def test_values_in_unit_range(self):
         for tilt in (0.0, 1.0, 2.0, 5.0, 10.0):
-            for ch in ss._bubble_color(tilt):
+            for ch in widgets._bubble_color(tilt):
                 assert 0.0 <= ch <= 1.0
 
 
@@ -104,35 +109,35 @@ class TestBubbleColor:
 @needs_gtk
 class TestSettingsIO:
     def test_roundtrip(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(ss, "CONFIG_DIR",  str(tmp_path))
-        monkeypatch.setattr(ss, "CONFIG_FILE", str(tmp_path / "settings.json"))
+        monkeypatch.setattr(app_config, "CONFIG_DIR",  str(tmp_path))
+        monkeypatch.setattr(app_config, "CONFIG_FILE", str(tmp_path / "settings.json"))
         data = {"theme": "dark", "lang": "de",
                 "cal_roll": 1.5, "cal_pitch": -0.7}
         ss.save_settings(data)
         assert ss.load_settings() == data
 
     def test_defaults_when_file_absent(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(ss, "CONFIG_FILE", str(tmp_path / "no_file.json"))
+        monkeypatch.setattr(app_config, "CONFIG_FILE", str(tmp_path / "no_file.json"))
         s = ss.load_settings()
         assert s == {"theme": "auto", "lang": "en"}
 
     def test_malformed_json_returns_defaults(self, tmp_path, monkeypatch):
         f = tmp_path / "settings.json"
         f.write_text("{not valid JSON")
-        monkeypatch.setattr(ss, "CONFIG_FILE", str(f))
+        monkeypatch.setattr(app_config, "CONFIG_FILE", str(f))
         s = ss.load_settings()
         assert s["lang"] == "en"
 
     def test_creates_missing_directories(self, tmp_path, monkeypatch):
         nested = tmp_path / "a" / "b" / "c"
-        monkeypatch.setattr(ss, "CONFIG_DIR",  str(nested))
-        monkeypatch.setattr(ss, "CONFIG_FILE", str(nested / "settings.json"))
+        monkeypatch.setattr(app_config, "CONFIG_DIR",  str(nested))
+        monkeypatch.setattr(app_config, "CONFIG_FILE", str(nested / "settings.json"))
         ss.save_settings({"theme": "auto", "lang": "en"})
         assert (nested / "settings.json").exists()
 
     def test_float_calibration_values_preserved(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(ss, "CONFIG_DIR",  str(tmp_path))
-        monkeypatch.setattr(ss, "CONFIG_FILE", str(tmp_path / "settings.json"))
+        monkeypatch.setattr(app_config, "CONFIG_DIR",  str(tmp_path))
+        monkeypatch.setattr(app_config, "CONFIG_FILE", str(tmp_path / "settings.json"))
         data = {"theme": "auto", "lang": "en",
                 "cal_roll": 2.345678, "cal_pitch": -1.234567}
         ss.save_settings(data)
@@ -423,31 +428,31 @@ class TestLevelCalibrationLogic:
 class TestFindIIOMagnetometer:
     def test_returns_none_when_base_absent(self, monkeypatch):
         monkeypatch.setattr(os.path, "isdir", lambda p: False)
-        assert ss.find_iio_magnetometer() is None
+        assert sensors.find_iio_magnetometer() is None
 
     def test_finds_device_by_name_keyword(self, tmp_path, monkeypatch):
         dev = tmp_path / "iio:device0"
         dev.mkdir()
         (dev / "name").write_text("ak09918\n")
         (dev / "in_magn_x_raw").touch()
-        monkeypatch.setattr(ss, "IIO_BASE", str(tmp_path))
-        assert ss.find_iio_magnetometer() == str(dev)
+        monkeypatch.setattr(sensors, "IIO_BASE", str(tmp_path))
+        assert sensors.find_iio_magnetometer() == str(dev)
 
     def test_ignores_device_missing_raw_file(self, tmp_path, monkeypatch):
         dev = tmp_path / "iio:device0"
         dev.mkdir()
         (dev / "name").write_text("ak09918\n")
         # no in_magn_x_raw
-        monkeypatch.setattr(ss, "IIO_BASE", str(tmp_path))
-        assert ss.find_iio_magnetometer() is None
+        monkeypatch.setattr(sensors, "IIO_BASE", str(tmp_path))
+        assert sensors.find_iio_magnetometer() is None
 
     def test_ignores_non_magnetometer_by_name(self, tmp_path, monkeypatch):
         dev = tmp_path / "iio:device0"
         dev.mkdir()
         (dev / "name").write_text("bmp280\n")   # pressure sensor
         (dev / "in_magn_x_raw").touch()
-        monkeypatch.setattr(ss, "IIO_BASE", str(tmp_path))
-        assert ss.find_iio_magnetometer() is None
+        monkeypatch.setattr(sensors, "IIO_BASE", str(tmp_path))
+        assert sensors.find_iio_magnetometer() is None
 
     def test_picks_sorted_first_match(self, tmp_path, monkeypatch):
         for name, node in (("ak09918", "iio:device0"), ("mmc56x3", "iio:device1")):
@@ -455,19 +460,19 @@ class TestFindIIOMagnetometer:
             d.mkdir()
             (d / "name").write_text(name + "\n")
             (d / "in_magn_x_raw").touch()
-        monkeypatch.setattr(ss, "IIO_BASE", str(tmp_path))
-        result = ss.find_iio_magnetometer()
+        monkeypatch.setattr(sensors, "IIO_BASE", str(tmp_path))
+        result = sensors.find_iio_magnetometer()
         assert result is not None
         assert result.endswith("iio:device0")
 
     def test_all_magn_keywords_recognised(self, tmp_path, monkeypatch):
-        for kw in ss.MAGN_KEYWORDS:
+        for kw in sensors.MAGN_KEYWORDS:
             dev = tmp_path / f"iio:device_{kw}"
             dev.mkdir()
             (dev / "name").write_text(f"sensor_{kw}_xyz\n")
             (dev / "in_magn_x_raw").touch()
-            monkeypatch.setattr(ss, "IIO_BASE", str(tmp_path))
-            result = ss.find_iio_magnetometer()
+            monkeypatch.setattr(sensors, "IIO_BASE", str(tmp_path))
+            result = sensors.find_iio_magnetometer()
             assert result is not None, f"keyword '{kw}' not matched"
             # clean up for next iteration
             import shutil; shutil.rmtree(str(dev))
@@ -482,22 +487,22 @@ class TestSecurity:
     def test_oversized_settings_json_no_crash(self, tmp_path, monkeypatch):
         f = tmp_path / "settings.json"
         f.write_text('{"theme": "dark"' + ', "x": "' + "y" * 10000 + '"}')
-        monkeypatch.setattr(ss, "CONFIG_FILE", str(f))
+        monkeypatch.setattr(app_config, "CONFIG_FILE", str(f))
         result = ss.load_settings()
         assert isinstance(result, dict)
 
     def test_deeply_nested_json_no_crash(self, tmp_path, monkeypatch):
         f = tmp_path / "settings.json"
         f.write_text("[" * 300 + "]" * 300)   # deeply nested, not a dict
-        monkeypatch.setattr(ss, "CONFIG_FILE", str(f))
+        monkeypatch.setattr(app_config, "CONFIG_FILE", str(f))
         result = ss.load_settings()
         assert isinstance(result, dict)   # falls back to defaults
 
     def test_config_file_is_inside_config_dir(self):
-        assert ss.CONFIG_FILE.startswith(ss.CONFIG_DIR)
+        assert app_config.CONFIG_FILE.startswith(app_config.CONFIG_DIR)
 
     def test_sl_config_file_is_inside_config_dir(self):
-        assert sl.CONFIG_FILE.startswith(sl.CONFIG_DIR)
+        assert app_config.CONFIG_FILE.startswith(app_config.CONFIG_DIR)
 
 
 class TestSecurityProtocol:
@@ -598,8 +603,8 @@ class TestPerformance:
     def test_settings_json_save_load_under_50ms(self, tmp_path, monkeypatch):
         if not HAS_GTK:
             pytest.skip("GTK not available")
-        monkeypatch.setattr(ss, "CONFIG_DIR",  str(tmp_path))
-        monkeypatch.setattr(ss, "CONFIG_FILE", str(tmp_path / "settings.json"))
+        monkeypatch.setattr(app_config, "CONFIG_DIR",  str(tmp_path))
+        monkeypatch.setattr(app_config, "CONFIG_FILE", str(tmp_path / "settings.json"))
         data = {"theme": "auto", "lang": "en",
                 "cal_roll": 1.23, "cal_pitch": -0.45}
         start = time.perf_counter()
@@ -608,3 +613,59 @@ class TestPerformance:
             ss.load_settings()
         elapsed = time.perf_counter() - start
         assert elapsed < 0.050, f"20 save/load cycles took {elapsed*1000:.1f} ms"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GPS unit formatting — gps.format_altitude / gps.format_speed
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@needs_gtk
+class TestAltitudeFormatting:
+    def test_metric_de_label_and_unit(self):
+        assert gps.format_altitude(1000, "metric", "de") == "Höhe 1000 m"
+
+    def test_metric_en_label(self):
+        assert gps.format_altitude(1000, "metric", "en") == "Altitude 1000 m"
+
+    def test_imperial_converts_to_feet(self):
+        # 1000 m * 3.28084 = 3280.84 ft -> rounded
+        assert gps.format_altitude(1000, "imperial", "en") == "Altitude 3281 ft"
+
+    def test_imperial_de_keeps_german_label(self):
+        # label follows language, unit follows unit system (regression: was coupled)
+        assert gps.format_altitude(1000, "imperial", "de") == "Höhe 3281 ft"
+
+    def test_none_shows_placeholder(self):
+        assert gps.format_altitude(None, "metric", "en") == "Altitude -- m"
+        assert gps.format_altitude(None, "imperial", "de") == "Höhe -- ft"
+
+    def test_non_finite_shows_placeholder(self):
+        assert gps.format_altitude(float("nan"), "metric", "de") == "Höhe -- m"
+        assert gps.format_altitude(float("inf"), "metric", "en") == "Altitude -- m"
+
+    def test_default_lang_is_german(self):
+        assert gps.format_altitude(0, "metric") == "Höhe 0 m"
+
+
+@needs_gtk
+class TestSpeedFormatting:
+    def test_metric_kmh(self):
+        # 10 m/s * 3.6 = 36 km/h
+        assert gps.format_speed(10, "metric") == ("36", "km/h")
+
+    def test_imperial_mph(self):
+        # 10 m/s * 2.236936 = 22.37 mph -> rounded
+        assert gps.format_speed(10, "imperial") == ("22", "mph")
+
+    def test_none_metric_placeholder(self):
+        assert gps.format_speed(None, "metric") == ("--", "km/h")
+
+    def test_none_imperial_placeholder(self):
+        assert gps.format_speed(None, "imperial") == ("--", "mph")
+
+    def test_non_finite_placeholder(self):
+        assert gps.format_speed(float("nan"), "metric") == ("--", "km/h")
+        assert gps.format_speed(float("inf"), "imperial") == ("--", "mph")
+
+    def test_zero_speed(self):
+        assert gps.format_speed(0, "metric") == ("0", "km/h")

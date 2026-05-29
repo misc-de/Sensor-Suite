@@ -52,6 +52,10 @@ python3 sensor_suite.py
 |---|---|
 | `sensor_suite.py` | Main app — Compass, Spirit Level, G-Force in one window |
 | `gps.py` | Shared GeoClue GPS backend and unit formatting |
+| `sensors.py` | Shared sensor backends (IIO / hadess / sensorfwd / accelerometer) |
+| `widgets.py` | Shared Cairo drawing widgets (compass, levels, G-force) |
+| `i18n.py` | Shared translation table and lookup |
+| `app_config.py` | Shared settings persistence, theme, and config paths |
 | `compass.py` | Standalone compass app |
 | `spirit_level.py` | Standalone spirit level app |
 | `acceleration.py` | Standalone G-force / accelerometer app |

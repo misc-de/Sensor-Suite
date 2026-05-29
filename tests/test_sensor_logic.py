@@ -8,6 +8,7 @@ Tests are split into:
 """
 import math
 import os
+import re
 import struct
 import time
 import sys
@@ -56,15 +57,37 @@ class TestTranslation:
     def test_missing_key_returns_key(self):
         assert ss._("__no_such_key__", "en") == "__no_such_key__"
 
-    def test_all_ss_keys_have_en_and_de(self):
+    def test_all_keys_have_en_and_de(self):
         for key, langs in i18n._T.items():
-            assert "en" in langs, f"sensor_suite.py: key '{key}' missing 'en'"
-            assert "de" in langs, f"sensor_suite.py: key '{key}' missing 'de'"
+            assert "en" in langs, f"i18n key '{key}' missing 'en'"
+            assert "de" in langs, f"i18n key '{key}' missing 'de'"
 
-    def test_all_sl_keys_have_en_and_de(self):
-        for key, langs in i18n._T.items():
-            assert "en" in langs, f"spirit_level.py: key '{key}' missing 'en'"
-            assert "de" in langs, f"spirit_level.py: key '{key}' missing 'de'"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# i18n key coverage — every _("…") referenced in source must exist in the table
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@needs_gtk
+class TestI18nKeyCoverage:
+    APP_FILES = ["sensor_suite.py", "spirit_level.py", "compass.py", "acceleration.py"]
+    KEY_CALL = re.compile(r"""_\(\s*['"]([a-z0-9_]+)['"]""")
+
+    def _source(self, name):
+        root = os.path.dirname(os.path.dirname(__file__))
+        with open(os.path.join(root, name)) as f:
+            return f.read()
+
+    def test_referenced_keys_exist(self):
+        """Direct _("key", …) calls must reference a defined translation key.
+
+        Dynamically referenced keys (e.g. the _CALIB_HINT list) are not scanned.
+        """
+        missing = []
+        for name in self.APP_FILES:
+            for key in sorted(set(self.KEY_CALL.findall(self._source(name)))):
+                if key not in i18n._T:
+                    missing.append(f"{name}: '{key}'")
+        assert not missing, f"undefined i18n keys referenced: {missing}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

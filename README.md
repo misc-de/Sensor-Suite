@@ -4,14 +4,17 @@ A GTK4/Libadwaita sensor display app for Linux mobile devices (Phosh, FuriOS, Dr
 
 ![Sensor Suite](sensors.png)
 
+---
+⚠️ **AI-assisted project**  
+
+---
+
 ## Features
 
 - **Compass** — magnetic heading with animated needle, calibration support, altitude
 - **Spirit Level** — 2D bubble level + horizontal and vertical linear levels
 - **G-Force** — accelerometer display with X/Y/Z values, total magnitude, and GPS speed
 - **Metric / miles units** — switch speed and altitude units in Settings
-
-⚠️ **AI-assisted project**  
 
 ## Requirements
 
